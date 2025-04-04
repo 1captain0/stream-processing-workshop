@@ -45,124 +45,126 @@ public class PurchaseEventTicket {
                 .table(
                         TOPIC_DATA_DEMO_EVENTS,
                         Materialized
-                            .<String, Event>as(persistentKeyValueStore("events"))
-                            .withKeySerde(Serdes.String())
-                            .withValueSerde(Streams.SERDE_EVENT_JSON)
+                                .<String, Event>as(persistentKeyValueStore("events"))
+                                .withKeySerde(Serdes.String())
+                                .withValueSerde(Streams.SERDE_EVENT_JSON)
                 );
 
         // capture the backside of the table to log a confirmation that the Event was received
         eventsTable.toStream().peek((key, event) -> log.info("Event '{}' registered for artist '{}' at venue '{}' with a capacity of {}.", key, event.artistid(), event.venueid(), event.capacity()));
 
         builder
-            .stream(TOPIC_DATA_DEMO_TICKETS, Consumed.with(Serdes.String(), SERDE_TICKET_JSON))
-            .peek((ticketId, ticketRequest) -> log.info("Ticket Requested: {}", ticketRequest))
+                .stream(TOPIC_DATA_DEMO_TICKETS, Consumed.with(Serdes.String(), SERDE_TICKET_JSON))
+                .peek((ticketId, ticketRequest) -> log.info("Ticket Requested: {}", ticketRequest))
 
-            // rekey by eventid so we can join against the event ktable
-            .selectKey((ticketId, ticketRequest) -> ticketRequest.eventid(), Named.as("rekey-by-eventid"))
+                // rekey by eventid so we can join against the event ktable
+                .selectKey((ticketId, ticketRequest) -> ticketRequest.eventid(), Named.as("rekey-by-eventid"))
 
-            // join the incoming ticket to the event that it is for
-            .join(
-                    eventsTable,
-                    (eventId, ticket, event) -> new EventTicket(ticket, event)
-            )
-            .groupByKey()
-            .aggregate(
-                    // initializer (doesn't have key, value supplied so the actual initialization is in the aggregator)
-                    EventStatus::new,
+                // join the incoming ticket to the event that it is for
+                .join(
+                        eventsTable,
+                        (eventId, ticket, event) -> new EventTicket(ticket, event)
+                )
+                .groupByKey()
+                .aggregate(
+                        // initializer (doesn't have key, value supplied so the actual initialization is in the aggregator)
+                        EventStatus::new,
 
-                    // aggregator
-                    (eventId, ticketRequest, eventStatus) -> {
-                        // initialize (if necessary)
-                        if (!eventStatus.initialized) {
-                            eventStatus.initialize(ticketRequest.event);
-                        }
+                        // aggregator
+                        (eventId, ticketRequest, eventStatus) -> {
+                            // initialize (if necessary)
+                            if (!eventStatus.initialized) {
+                                eventStatus.initialize(ticketRequest.event);
+                            }
 
-                        // decrement remaining tickets by 1 (and increment totalRequested)
-                        eventStatus.decrementRemainingTickets();
+                            // decrement remaining tickets by 1 (and increment totalRequested)
+                            eventStatus.decrementRemainingTickets();
 
-                        // set the requested ticket so that it's available downstream
-                        eventStatus.setCurrentTicketRequest(ticketRequest.ticket);
+                            // set the requested ticket so that it's available downstream
+                            eventStatus.setCurrentTicketRequest(ticketRequest.ticket);
 
-                        return eventStatus;
-                    },
+                            return eventStatus;
+                        },
 
-                    // ktable (materialized) configuration
-                    Materialized
-                            .<String, EventStatus>as(persistentKeyValueStore("event-status-table"))
-                            .withKeySerde(Serdes.String())
-                            .withValueSerde(REMAINING_TICKETS_JSON_SERDE)
-            )
+                        // ktable (materialized) configuration
+                        Materialized
+                                .<String, EventStatus>as(persistentKeyValueStore("event-status-table"))
+                                .withKeySerde(Serdes.String())
+                                .withValueSerde(REMAINING_TICKETS_JSON_SERDE)
+                )
 
-            .toStream()
-            .split()
-            // sold out branch
-            .branch(
-                    (eventId, eventStatus) -> !eventStatus.hasRemainingTickets(),
-                    Branched.withConsumer(ks -> ks
-                            .peek((eventId, eventStatus) -> log.info("Ticket Rejected. '{}' has SOLD OUT!", eventId))
-                            .mapValues((eventStatus) ->
-                                    EventTicketConfirmation
-                                            .builder()
-                                            .confirmationId(UUID.randomUUID().toString())
-                                            .confirmationStatus("REJECTED")
-                                            .event(eventStatus.event)
-                                            .ticketRequest(eventStatus.currentTicketRequest)
-                                            .remainingTickets(eventStatus.remaining)
-                                            .build()
-                            )
-                            .to(OUTPUT_TOPIC, Produced.with(Serdes.String(), TICKET_CONFIRMATION_JSON_SERDE))
-                    )
-            )
-            // confirmed, but limited availability
-            .branch(
-                    (eventId, remainingTickets) -> remainingTickets.remainingPercentage() <= 20.0,
-                    Branched.withConsumer(ks -> ks
-                            .peek((eventId, remainingTickets) -> {
-                                if (remainingTickets.remainingPercentage() == 0.0) {
-                                    log.info("Ticket Confirmed. '{}' event is now sold out.", eventId);
-                                } else {
-                                    log.info("Ticket Confirmed. '{}' is almost sold out, {} ticket(s) remain.", eventId, remainingTickets.remaining);
-                                }
-                            })
-                            .mapValues((eventStatus) ->
-                                    EventTicketConfirmation
-                                            .builder()
-                                            .confirmationId(UUID.randomUUID().toString())
-                                            .confirmationStatus("CONFIRMED")
-                                            .event(eventStatus.event)
-                                            .ticketRequest(eventStatus.currentTicketRequest)
-                                            .remainingTickets(eventStatus.remaining)
-                                            .build()
-                            )
-                            .to(OUTPUT_TOPIC, Produced.with(Serdes.String(), TICKET_CONFIRMATION_JSON_SERDE))
-                    )
-            )
-            // confirmed
-            .branch(
-                    (eventId, remainingTickets) -> remainingTickets.remainingPercentage() > 20,
-                    Branched.withConsumer(ks -> ks
-                            .peek((eventId, eventStatus) -> log.info("Ticket Confirmed. {} tickets remain for '{}'", eventStatus.remaining, eventId))
-                            .mapValues((eventStatus) ->
-                                    EventTicketConfirmation
-                                            .builder()
-                                            .confirmationId(UUID.randomUUID().toString())
-                                            .confirmationStatus("CONFIRMED")
-                                            .event(eventStatus.event)
-                                            .ticketRequest(eventStatus.currentTicketRequest)
-                                            .remainingTickets(eventStatus.remaining)
-                                            .build()
-                            )
-                            .to(OUTPUT_TOPIC, Produced.with(Serdes.String(), TICKET_CONFIRMATION_JSON_SERDE))
-                    )
-            )
-            .noDefaultBranch();
+                .toStream()
+                .split()
+                // sold out branch
+                .branch(
+                        (eventId, eventStatus) -> !eventStatus.hasRemainingTickets(),
+                        Branched.withConsumer(ks -> ks
+                                .peek((eventId, eventStatus) -> log.info("Ticket Rejected. '{}' has SOLD OUT!", eventId))
+                                .mapValues((eventStatus) ->
+                                        EventTicketConfirmation
+                                                .builder()
+                                                .confirmationId(UUID.randomUUID().toString())
+                                                .confirmationStatus("REJECTED")
+                                                .event(eventStatus.event)
+                                                .ticketRequest(eventStatus.currentTicketRequest)
+                                                .remainingTickets(eventStatus.remaining)
+                                                .build()
+                                )
+                                .to(OUTPUT_TOPIC, Produced.with(Serdes.String(), TICKET_CONFIRMATION_JSON_SERDE))
+                        )
+                )
+                // confirmed, but limited availability
+                .branch(
+                        (eventId, remainingTickets) -> remainingTickets.remainingPercentage() <= 20.0,
+                        Branched.withConsumer(ks -> ks
+                                .peek((eventId, remainingTickets) -> {
+                                    if (remainingTickets.remainingPercentage() == 0.0) {
+                                        log.info("Ticket Confirmed. '{}' event is now sold out.", eventId);
+                                    } else {
+                                        log.info("Ticket Confirmed. '{}' is almost sold out, {} ticket(s) remain.", eventId, remainingTickets.remaining);
+                                    }
+                                })
+                                .mapValues((eventStatus) ->
+                                        EventTicketConfirmation
+                                                .builder()
+                                                .confirmationId(UUID.randomUUID().toString())
+                                                .confirmationStatus("CONFIRMED")
+                                                .event(eventStatus.event)
+                                                .ticketRequest(eventStatus.currentTicketRequest)
+                                                .remainingTickets(eventStatus.remaining)
+                                                .build()
+                                )
+                                .to(OUTPUT_TOPIC, Produced.with(Serdes.String(), TICKET_CONFIRMATION_JSON_SERDE))
+                        )
+                )
+                // confirmed
+                .branch(
+                        (eventId, remainingTickets) -> remainingTickets.remainingPercentage() > 20,
+                        Branched.withConsumer(ks -> ks
+                                .peek((eventId, eventStatus) -> log.info("Ticket Confirmed. {} tickets remain for '{}'", eventStatus.remaining, eventId))
+                                .mapValues((eventStatus) ->
+                                        EventTicketConfirmation
+                                                .builder()
+                                                .confirmationId(UUID.randomUUID().toString())
+                                                .confirmationStatus("CONFIRMED")
+                                                .event(eventStatus.event)
+                                                .ticketRequest(eventStatus.currentTicketRequest)
+                                                .remainingTickets(eventStatus.remaining)
+                                                .build()
+                                )
+                                .to(OUTPUT_TOPIC, Produced.with(Serdes.String(), TICKET_CONFIRMATION_JSON_SERDE))
+                        )
+                )
+                .noDefaultBranch();
     }
 
     @Data
-    @AllArgsConstructor
     public static class EventTicket {
         private Ticket ticket;
         private Event event;
+
+        public EventTicket(Ticket ticket, Event event) {
+        }
     }
 
     @Data
@@ -213,6 +215,9 @@ public class PurchaseEventTicket {
             }
 
             return (remaining / event.capacity()) * 100;
+        }
+
+        public void setCurrentTicketRequest(Ticket ticket) {
         }
     }
 }

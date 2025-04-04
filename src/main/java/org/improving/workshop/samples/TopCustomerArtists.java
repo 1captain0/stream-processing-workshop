@@ -1,5 +1,8 @@
 package org.improving.workshop.samples;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -27,7 +30,9 @@ public class TopCustomerArtists {
 
 
   // MUST BE PREFIXED WITH "kafka-workshop-"
-  public static final String OUTPUT_TOPIC = "kafka-workshop-top-10-stream-count";
+    public static final String OUTPUT_TOPIC = "kafka-workshop-top-10-stream-count";
+
+    private static final Logger log = LoggerFactory.getLogger(TopCustomerArtists.class);
 
   public static final JsonSerde<SortedCounterMap> COUNTER_MAP_JSON_SERDE = new JsonSerde<>(SortedCounterMap.class);
 
