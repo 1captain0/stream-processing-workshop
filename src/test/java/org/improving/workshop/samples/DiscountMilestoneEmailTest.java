@@ -19,6 +19,10 @@ import org.msse.demo.mockdata.customer.profile.Customer;
 import org.msse.demo.mockdata.music.event.Event;
 import org.msse.demo.mockdata.music.stream.Stream;
 import org.msse.demo.mockdata.music.ticket.Ticket;
+import org.springframework.kafka.support.serializer.JsonDeserializer;
+import org.springframework.kafka.support.serializer.JsonSerde;
+
+import java.util.Properties;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -38,8 +42,12 @@ public class DiscountMilestoneEmailTest {
     private TestInputTopic<String, Email> emailInputTopic;
 
     // outputs
-    private TestOutputTopic<String, DiscountMilestoneEmail.DiscountMilestoneEmailConfirmation> outputTopic;
-    private TestOutputTopic<String, DiscountMilestoneEmail.StreamClass> outputTopicStream;
+//    private TestOutputTopic<String, DiscountMilestoneEmail.DiscountMilestoneEmailConfirmation> outputTopic;
+//    private TestOutputTopic<String, DiscountMilestoneEmail.StreamClass> outputTopicStream;
+    private TestOutputTopic<String, DiscountMilestoneEmail.AggregatedStreamEnriched> outputTopic;
+
+//    DiscountMilestoneEmail.AGGREGATED_STREAM_JSON_SERDE.deserializer().addTrustedPackages("org.improving.workshop.samples");
+
 
     @BeforeEach
     void setup() {
@@ -76,16 +84,33 @@ public class DiscountMilestoneEmailTest {
                 Streams.SERDE_EMAIL_JSON.serializer()
         );
 
+// use for end output topic
 //        outputTopic = driver.createOutputTopic(
 //                DiscountMilestoneEmail.OUTPUT_TOPIC,
 //                stringDeserializer,
 //                DiscountMilestoneEmail.DISCOUNT_MILESTONE_EVENT_JSON_SERDE.deserializer()
 //        );
 
-        outputTopicStream = driver.createOutputTopic(
+// intermediate output topic
+//        outputTopicStream = driver.createOutputTopic(
+//                DiscountMilestoneEmail.OUTPUT_TOPIC,
+//                stringDeserializer,
+//                DiscountMilestoneEmail.STREAM_CLASS_JSON_SERDE.deserializer()
+//        );
+
+        // intermediate output topic
+//        outputTopicAggregatedStream = driver.createOutputTopic(
+//                DiscountMilestoneEmail.OUTPUT_TOPIC,
+//                stringDeserializer,
+//                DiscountMilestoneEmail.AGGREGATED_STREAM_JSON_SERDE.deserializer()
+//        );
+
+
+// intermediate output topic
+        outputTopic = driver.createOutputTopic(
                 DiscountMilestoneEmail.OUTPUT_TOPIC,
                 stringDeserializer,
-                DiscountMilestoneEmail.STREAM_CLASS_JSON_SERDE.deserializer()
+                DiscountMilestoneEmail.AGGREGATED_STREAM_ENRICHED_JSON_SERDE.deserializer()
         );
     }
 
@@ -100,16 +125,25 @@ public class DiscountMilestoneEmailTest {
     @DisplayName("confirm milestone discounts")
     void confirmMilestoneDiscount() {
         // Test case goes here
+
+    String eventId = "event-1";
+    eventInputTopic.pipeInput(eventId, new Event(eventId, "artist-1", "venue-1", 5, "today"));
+    eventInputTopic.pipeInput(eventId, new Event(eventId, "artist-1", "venue-2", 5, ""));
+
     String streamId1 = "stream-1";
     String streamId2 = "stream-2";
+    String streamId3 = "stream-3";
+    String streamId4 = "stream-4";
+    String streamId5 = "stream-5";
 
-
-    streamInputTopic.pipeInput(streamId1, new Stream(streamId1, "customer-1", "artist-1", "10"));
+    streamInputTopic.pipeInput(streamId1, new Stream(streamId1, "customer-1", "artist-1", "2"));
     streamInputTopic.pipeInput(streamId2, new Stream(streamId2, "customer-1", "artist-1", "5"));
+    streamInputTopic.pipeInput(streamId5, new Stream(streamId5, "customer-1", "artist-1", "5"));
+    streamInputTopic.pipeInput(streamId3, new Stream(streamId3, "customer-2", "artist-1", "7"));
+    streamInputTopic.pipeInput(streamId4, new Stream(streamId4, "customer-2", "artist-1", "3"));
 
-
-    var outputRecords = outputTopicStream.readRecordsToList();
-    assertEquals(2, outputRecords.size());
+    var outputRecords = outputTopic.readRecordsToList();
+    assertEquals(4, outputRecords.size());
 
     }
 }
