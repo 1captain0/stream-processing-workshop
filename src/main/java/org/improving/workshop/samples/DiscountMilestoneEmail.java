@@ -43,11 +43,7 @@ public class DiscountMilestoneEmail {
 
     public static final JsonSerde<DiscountMilestoneEmail.AggregatedStream> AGGREGATED_STREAM_JSON_SERDE =
             new JsonSerde<>(DiscountMilestoneEmail.AggregatedStream.class);
-//    static {
-//        // Trust only the package containing your AggregatedStream class
-//        ((JsonDeserializer<DiscountMilestoneEmail.AggregatedStream>) AGGREGATED_STREAM_JSON_SERDE.deserializer())
-//                .addTrustedPackages("org.improving.workshop.samples");
-//    }
+
     private static final Logger log = LoggerFactory.getLogger(DiscountMilestoneEmail.class);
 
     public static final int MILESTONE = 10;
@@ -121,7 +117,8 @@ public class DiscountMilestoneEmail {
                         .venueId(event.venueid())
                         .capacity(event.capacity())
                         .eventDate(event.eventdate())
-                        .build()
+                        .build(),
+                Joined.with(Serdes.String(), AGGREGATED_STREAM_JSON_SERDE, SERDE_EVENT_JSON)
         ).peek((key,enrichedStream) -> log.info(
                 "Joined stream => artistId={}, customerId={}, totalStreamTime={}, venueId={}, capacity={}, data={}",
                 enrichedStream.artistId, enrichedStream.customerId, enrichedStream.totalStreamTime,

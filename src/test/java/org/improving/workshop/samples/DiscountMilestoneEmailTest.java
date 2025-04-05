@@ -127,8 +127,8 @@ public class DiscountMilestoneEmailTest {
         // Test case goes here
 
     String eventId = "event-1";
-    eventInputTopic.pipeInput(eventId, new Event(eventId, "artist-1", "venue-1", 5, "today"));
-    eventInputTopic.pipeInput(eventId, new Event(eventId, "artist-1", "venue-2", 5, ""));
+    eventInputTopic.pipeInput(eventId, new Event(eventId, "artist-1", "venue-1", 5, "2025-11-21 00:07:06.973"));
+    eventInputTopic.pipeInput(eventId, new Event(eventId, "artist-1", "venue-2", 10, "2025-04-24 06:49:41.862"));
 
     String streamId1 = "stream-1";
     String streamId2 = "stream-2";
@@ -143,7 +143,7 @@ public class DiscountMilestoneEmailTest {
     streamInputTopic.pipeInput(streamId4, new Stream(streamId4, "customer-2", "artist-1", "3"));
 
     var outputRecords = outputTopic.readRecordsToList();
-    assertEquals(4, outputRecords.size());
+    assertEquals(1, outputRecords.size());
 
     }
 }
