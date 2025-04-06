@@ -8,10 +8,13 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.kstream.*;
 import org.improving.workshop.Streams;
+import org.msse.demo.mockdata.customer.email.Email;
+import org.msse.demo.mockdata.customer.profile.Customer;
 import org.msse.demo.mockdata.music.event.Event;
 import org.msse.demo.mockdata.music.stream.Stream;
 import org.msse.demo.mockdata.music.event.Event;
@@ -48,6 +51,15 @@ public class DiscountMilestoneEmail {
     public static final JsonSerde<DiscountMilestoneEmail.AggregatedStream> AGGREGATED_STREAM_JSON_SERDE =
             new JsonSerde<>(DiscountMilestoneEmail.AggregatedStream.class);
 
+    public static final JsonSerde<DiscountMilestoneEmail.MinimalCustomer> MINIMAL_CUSTOMER_JSON_SERDE =
+            new JsonSerde<>(DiscountMilestoneEmail.MinimalCustomer.class);
+
+    public static final JsonSerde<DiscountMilestoneEmail.EnrichedCustomer> ENRICHED_CUSTOMER_JSON_SERDE =
+            new JsonSerde<>(DiscountMilestoneEmail.EnrichedCustomer.class);
+
+    public static final JsonSerde<DiscountMilestoneEmail.FinalEnrichedOutput> FINAL_ENRICHED_JSON_SERDE =
+            new JsonSerde<>(DiscountMilestoneEmail.FinalEnrichedOutput.class);
+
     private static final Logger log = LoggerFactory.getLogger(DiscountMilestoneEmail.class);
 
     public static final int MILESTONE = 2;
@@ -63,17 +75,50 @@ public class DiscountMilestoneEmail {
     }
 
     static void configureTopology(final StreamsBuilder builder) {
-        //ktable for events grouped by artist id
-//        KTable<String, Event> eventByArtist = builder
-//                .stream(TOPIC_DATA_DEMO_EVENTS, Consumed.with(Serdes.String(), Streams.SERDE_EVENT_JSON))
-//                .selectKey((key, event) -> event.artistid())  // Re-key to artist id
-//                .toTable(Materialized.<String, Event>as(persistentKeyValueStore("event-by-artist"))
-//                        .withKeySerde(Serdes.String())
-//                        .withValueSerde(Streams.SERDE_EVENT_JSON));
-//        eventByArtist
-//                .toStream()
-//                .peek((key, event) -> log.info("KTable update - key: {}, event: {}", key, event))
-//                .to(EVENT_OUTPUT_TOPIC, Produced.with(Serdes.String(), SERDE_EVENT_JSON));
+
+        KTable<String, MinimalCustomer> minimalCustomerTable = builder
+                .stream(TOPIC_DATA_DEMO_CUSTOMERS, Consumed.with(Serdes.String(), SERDE_CUSTOMER_JSON))
+                .mapValues(customer ->
+                        MinimalCustomer.builder()
+                                .customerId(customer.id())
+                                .fName(customer.fname())
+                                .lName(customer.lname())
+                                .title(customer.title())
+                                .gender(customer.gender())
+                                .build()
+                ).peek((key, customer) -> log.info("Received customer record: key={}, value={}", key, customer))
+                .toTable(Materialized.<String, MinimalCustomer>as(persistentKeyValueStore("minimal-customer-store"))
+                        .withKeySerde(Serdes.String())
+                        .withValueSerde(MINIMAL_CUSTOMER_JSON_SERDE));
+
+
+        KTable<String, Email> emailTable = builder
+                .stream(TOPIC_DATA_DEMO_EMAILS, Consumed.with(Serdes.String(), SERDE_EMAIL_JSON))
+                // Re-key by customerid
+                .selectKey((oldKey, email) -> email.customerid())
+                .peek((key, email) -> log.info("Received Email record: key={}, value={}", key, email))
+                .toTable(Materialized.<String, Email>as(persistentKeyValueStore("email-store"))
+                        .withKeySerde(Serdes.String())
+                        .withValueSerde(SERDE_EMAIL_JSON));
+
+        KTable<String, EnrichedCustomer> enrichedCustomerTable = minimalCustomerTable.join(
+                emailTable,
+                (minimalCustomer, email) -> EnrichedCustomer.builder()
+                        .customerId(minimalCustomer.getCustomerId())
+                        .fName(minimalCustomer.fName)
+                        .lName(minimalCustomer.lName)
+                        .title(minimalCustomer.title)
+                        .gender(minimalCustomer.gender)
+                        .email(email.email())
+                        .build(),
+                Materialized.<String, EnrichedCustomer>as(persistentKeyValueStore("enriched-customer-store"))
+                        .withKeySerde(Serdes.String())
+                        .withValueSerde(ENRICHED_CUSTOMER_JSON_SERDE)
+        );
+
+        KStream<String, EnrichedCustomer> enrichedCustomerStream = enrichedCustomerTable.toStream()
+                .peek((key, value) -> log.info("Enriched Customer record: key={}, value={}", key, value));
+
 
         KStream<String, Event> eventStream = builder
                 .stream(TOPIC_DATA_DEMO_EVENTS, Consumed.with(Serdes.String(), Streams.SERDE_EVENT_JSON))
@@ -166,6 +211,7 @@ public class DiscountMilestoneEmail {
                         .customerId(agg.customerId)
                         .artistId(agg.artistId)
                         .totalStreamCount(agg.totalStreamCount)
+                        .eventId(event.id())
                         .venueId(event.venueid())
                         .capacity(event.capacity())
                         .eventDate(event.eventdate())
@@ -174,16 +220,94 @@ public class DiscountMilestoneEmail {
         );
 
         // write to a new output topic
-        joinedStream
-                .peek((artistId, enriched) -> log.info(
-                        "Joined stream => artistId={}, customerId={}, totalStreamCount={}, venueId={}, capacity={}, data={}",
-                        enriched.artistId, enriched.customerId, enriched.totalStreamCount,
-                        enriched.venueId, enriched.capacity, enriched.eventDate
-                ))
-                .to(OUTPUT_TOPIC,
-                        Produced.with(Serdes.String(), AGGREGATED_STREAM_ENRICHED_JSON_SERDE));
+//        joinedStream
+//                .peek((artistId, enriched) -> log.info(
+//                        "Joined stream => artistId={}, customerId={}, totalStreamCount={}, eventId={}, venueId={}, capacity={}, date={}",
+//                        enriched.artistId, enriched.customerId, enriched.totalStreamCount,
+//                        enriched.eventId, enriched.venueId, enriched.capacity, enriched.eventDate
+//                ))
+//                .to(OUTPUT_TOPIC,
+//                        Produced.with(Serdes.String(), AGGREGATED_STREAM_ENRICHED_JSON_SERDE));
+
+
+        KStream<String, AggregatedStreamEnriched> rekeyedJoinedStream = joinedStream
+                .selectKey((oldKey, value) -> value.getCustomerId());
+
+        KStream<String, FinalEnrichedOutput> finalEnrichedStream = rekeyedJoinedStream.join(
+                enrichedCustomerTable,
+                (aggEnriched, enrichedCustomer) -> FinalEnrichedOutput.builder()
+                        .customerId(aggEnriched.getCustomerId())
+                        .artistId(aggEnriched.getArtistId())
+                        .totalStreamCount(aggEnriched.getTotalStreamCount())
+                        .eventId(aggEnriched.getEventId())
+                        .venueId(aggEnriched.getVenueId())
+                        .capacity(aggEnriched.getCapacity())
+                        .eventDate(aggEnriched.getEventDate())
+                        .fName(enrichedCustomer.getFName())
+                        .lName(enrichedCustomer.getLName())
+                        .title(enrichedCustomer.getTitle())
+                        .gender(enrichedCustomer.getGender())
+                        .email(enrichedCustomer.getEmail())
+                        .build(),
+                Joined.with(
+                        Serdes.String(),
+                        AGGREGATED_STREAM_ENRICHED_JSON_SERDE,
+                        ENRICHED_CUSTOMER_JSON_SERDE
+                ));
+
+        finalEnrichedStream
+                .peek((key, value) -> log.info("Final Enriched Output: key={}, value={}", key, value))
+                .to(OUTPUT_TOPIC, Produced.with(Serdes.String(), FINAL_ENRICHED_JSON_SERDE));
 
     }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class FinalEnrichedOutput {
+        private String customerId;
+        private String artistId;
+        private long totalStreamCount;
+        private String eventId;
+        private String venueId;
+        private Integer capacity;
+        private String eventDate;
+        // Fields from EnrichedCustomer
+        private String fName;
+        private String lName;
+        private String title;
+        private String gender;
+        private String email;
+    }
+
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class EnrichedCustomer {
+        private String customerId;
+        private String fName;
+        private String lName;
+        private String title;
+        private String gender;
+        private String email;
+    }
+
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class MinimalCustomer {
+        private String customerId;
+        private String fName;
+        private String lName;
+        private String title;
+        private String gender;
+    }
+
 
     @Data
     @Builder
@@ -193,6 +317,7 @@ public class DiscountMilestoneEmail {
         private String customerId;
         private String artistId;
         private long totalStreamCount;
+        private String eventId;
         private String venueId;
         private Integer capacity;
         private String eventDate;
@@ -231,6 +356,7 @@ public class DiscountMilestoneEmail {
         private Event event;
         private double remainingTickets;
     }
+
 }
 
 

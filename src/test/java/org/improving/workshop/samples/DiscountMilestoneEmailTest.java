@@ -3,10 +3,7 @@ package org.improving.workshop.samples;
 import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.common.serialization.Serializer;
-import org.apache.kafka.streams.StreamsBuilder;
-import org.apache.kafka.streams.TestInputTopic;
-import org.apache.kafka.streams.TestOutputTopic;
-import org.apache.kafka.streams.TopologyTestDriver;
+import org.apache.kafka.streams.*;
 import org.apache.kafka.streams.test.TestRecord;
 import org.improving.workshop.Streams;
 import org.improving.workshop.utils.DataFaker;
@@ -22,6 +19,7 @@ import org.msse.demo.mockdata.music.ticket.Ticket;
 import org.springframework.kafka.support.serializer.JsonDeserializer;
 import org.springframework.kafka.support.serializer.JsonSerde;
 
+import java.util.List;
 import java.util.Properties;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -133,6 +131,19 @@ public class DiscountMilestoneEmailTest {
     void confirmMilestoneDiscount() {
         // Test case goes here
 
+    var cust1 = new Customer("customer-1", "PREMIUM", "M", "John", "Steven", "James", "JSJ", "", "", "1989-01-20", "2022-01-02");
+    var cust2 = new Customer("customer-2", "PREMIUM", "M", "Jane", "Jo", "James", "JJJ", "", "", "1990-01-20", "2022-01-02");
+
+    customerInputTopic.pipeKeyValueList(List.of(
+            new KeyValue<String, Customer>(cust1.id(), cust1),
+            new KeyValue<String, Customer>(cust2.id(), cust2)
+    ));
+
+    String emailKey1  = "email-1";
+    String emailKey2  = "email-2";
+    emailInputTopic.pipeInput(emailKey1, new Email(emailKey1, "customer-1", "customer1@gmail.com"));
+    emailInputTopic.pipeInput(emailKey2, new Email(emailKey2, "customer-2", "customer2@gmail.com"));
+
     String eventId1 = "event-1";
     String eventId2 = "event-2";
     String eventId3 = "event-3";
@@ -153,8 +164,8 @@ public class DiscountMilestoneEmailTest {
 
     streamInputTopic.pipeInput(streamId1, new Stream(streamId1, "customer-1", "artist-1", "2"));
     streamInputTopic.pipeInput(streamId2, new Stream(streamId2, "customer-1", "artist-1", "5"));
-    streamInputTopic.pipeInput(streamId5, new Stream(streamId5, "customer-1", "artist-2", "5"));
-    streamInputTopic.pipeInput(streamId5, new Stream(streamId6, "customer-1", "artist-2", "3"));
+    streamInputTopic.pipeInput(streamId5, new Stream(streamId5, "customer-1", "artist-1", "5"));
+    streamInputTopic.pipeInput(streamId5, new Stream(streamId6, "customer-1", "artist-1", "3"));
     streamInputTopic.pipeInput(streamId3, new Stream(streamId3, "customer-2", "artist-1", "7"));
     streamInputTopic.pipeInput(streamId4, new Stream(streamId4, "customer-2", "artist-1", "3"));
 
