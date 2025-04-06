@@ -39,13 +39,8 @@ public class DiscountMilestoneEmailTest {
     private TestInputTopic<String, Customer> customerInputTopic;
     private TestInputTopic<String, Email> emailInputTopic;
 
-    // outputs
-//    private TestOutputTopic<String, DiscountMilestoneEmail.DiscountMilestoneEmailConfirmation> outputTopic;
-//    private TestOutputTopic<String, DiscountMilestoneEmail.StreamClass> outputTopicStream;
     private TestOutputTopic<String, DiscountMilestoneEmail.AggregatedStreamEnriched> outputTopic;
     private TestOutputTopic<String, Event> eventOutputTopic;
-
-//    DiscountMilestoneEmail.AGGREGATED_STREAM_JSON_SERDE.deserializer().addTrustedPackages("org.improving.workshop.samples");
 
 
     @BeforeEach
@@ -83,29 +78,6 @@ public class DiscountMilestoneEmailTest {
                 Streams.SERDE_EMAIL_JSON.serializer()
         );
 
-// use for end output topic
-//        outputTopic = driver.createOutputTopic(
-//                DiscountMilestoneEmail.OUTPUT_TOPIC,
-//                stringDeserializer,
-//                DiscountMilestoneEmail.DISCOUNT_MILESTONE_EVENT_JSON_SERDE.deserializer()
-//        );
-
-// intermediate output topic
-//        outputTopicStream = driver.createOutputTopic(
-//                DiscountMilestoneEmail.OUTPUT_TOPIC,
-//                stringDeserializer,
-//                DiscountMilestoneEmail.STREAM_CLASS_JSON_SERDE.deserializer()
-//        );
-
-        // intermediate output topic
-//        outputTopicAggregatedStream = driver.createOutputTopic(
-//                DiscountMilestoneEmail.OUTPUT_TOPIC,
-//                stringDeserializer,
-//                DiscountMilestoneEmail.AGGREGATED_STREAM_JSON_SERDE.deserializer()
-//        );
-
-
-// intermediate output topic
         outputTopic = driver.createOutputTopic(
                 DiscountMilestoneEmail.OUTPUT_TOPIC,
                 stringDeserializer,

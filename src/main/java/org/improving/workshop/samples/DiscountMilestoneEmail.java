@@ -37,14 +37,6 @@ public class DiscountMilestoneEmail {
     public static final String OUTPUT_TOPIC = "kafka-workshop-discount-milestone-email";
     public static final String EVENT_OUTPUT_TOPIC = "kafka-workshop-discount-milestone-email";
 
-
-    public static final JsonSerde<DiscountMilestoneEmail.DiscountMilestoneEmailConfirmation> DISCOUNT_MILESTONE_EVENT_JSON_SERDE
-        = new JsonSerde<>(DiscountMilestoneEmailConfirmation.class);
-
-    // stream class for test
-    public static final JsonSerde<DiscountMilestoneEmail.StreamClass> STREAM_CLASS_JSON_SERDE
-            = new JsonSerde<>(StreamClass.class);
-
     public static final JsonSerde<DiscountMilestoneEmail.AggregatedStreamEnriched> AGGREGATED_STREAM_ENRICHED_JSON_SERDE =
             new JsonSerde<>(DiscountMilestoneEmail.AggregatedStreamEnriched.class);
 
@@ -91,7 +83,6 @@ public class DiscountMilestoneEmail {
                         .withKeySerde(Serdes.String())
                         .withValueSerde(MINIMAL_CUSTOMER_JSON_SERDE));
 
-
         KTable<String, Email> emailTable = builder
                 .stream(TOPIC_DATA_DEMO_EMAILS, Consumed.with(Serdes.String(), SERDE_EMAIL_JSON))
                 // Re-key by customerid
@@ -119,7 +110,6 @@ public class DiscountMilestoneEmail {
         KStream<String, EnrichedCustomer> enrichedCustomerStream = enrichedCustomerTable.toStream()
                 .peek((key, value) -> log.info("Enriched Customer record: key={}, value={}", key, value));
 
-
         KStream<String, Event> eventStream = builder
                 .stream(TOPIC_DATA_DEMO_EVENTS, Consumed.with(Serdes.String(), Streams.SERDE_EVENT_JSON))
                 // Filter out past events by comparing the date (first 10 characters of eventdate)
@@ -145,7 +135,6 @@ public class DiscountMilestoneEmail {
                 .peek((artistId, event) -> log.info("Upcoming Event for artist {}: {}", artistId, event))
                 .to(EVENT_OUTPUT_TOPIC, Produced.with(Serdes.String(), SERDE_EVENT_JSON));
 
-
         //  group the Streams by (customerId--artistId) => sum of streamtime
         KGroupedStream<String, Stream> groupedStreams = builder
                 .stream(TOPIC_DATA_DEMO_STREAMS, Consumed.with(Serdes.String(), Streams.SERDE_STREAM_JSON))
@@ -153,16 +142,6 @@ public class DiscountMilestoneEmail {
                         key, stream.customerid(), stream.artistid(), stream.streamtime()))
                 .groupBy((key, stream) -> stream.customerid() + "--" + stream.artistid(),
                         Grouped.with(Serdes.String(), Streams.SERDE_STREAM_JSON));
-
-        // aggregate the value to count stream time count
-//        KTable<String, Double> aggregatedStreamTime = groupedStreams.aggregate(
-//                //initialise value to 0.0
-//                () -> 0.0,
-//                // add value from ktable and stream
-//                (compositeKey, newStream, aggValue) ->
-//                        aggValue + Double.parseDouble(newStream.streamtime()),
-//                Materialized.with(Serdes.String(), Serdes.Double())
-//        );
 
         KTable<String, Long> aggregatedStreamCount = groupedStreams.aggregate(
                 // Initialize count to 0
@@ -191,19 +170,6 @@ public class DiscountMilestoneEmail {
                 .peek((key, filteredStream) -> log.info("Filtered stream with key {}: {}, {}, {}",
                         key, filteredStream.customerId, filteredStream.artistId, filteredStream.totalStreamCount));
 
-//        KStream<String, AggregatedStream> dedupAggregatedStream = aggregatedStreamByArtist
-//                // Re-key with composite key (artistId--customerId)
-//                .selectKey((key, agg) -> agg.getArtistId() + "--" + agg.getCustomerId())
-//                // Group by the new composite key and reduce to keep the latest record
-//                .groupByKey(Grouped.with(Serdes.String(), AGGREGATED_STREAM_JSON_SERDE))
-//                .reduce((existing, updated) -> updated)
-//                // Convert back to stream
-//                .toStream()
-//                // Re-key by artistId (to match the key in eventByArtist)
-//                .selectKey((compositeKey, agg) -> agg.getArtistId())
-//                .peek((key, dedupStream)->log.info("deduplicated stream with key {}: {}, {}, {}",
-//                        key, dedupStream.customerId, dedupStream.artistId, dedupStream.totalStreamCount));
-
         // Join with the event KTable keyed by artistId
         KStream<String, AggregatedStreamEnriched> joinedStream = aggregatedStreamByArtist.join(
                 upcomingEventByArtist,
@@ -218,17 +184,6 @@ public class DiscountMilestoneEmail {
                         .build(),
                 Joined.with(Serdes.String(), AGGREGATED_STREAM_JSON_SERDE, SERDE_EVENT_JSON)
         );
-
-        // write to a new output topic
-//        joinedStream
-//                .peek((artistId, enriched) -> log.info(
-//                        "Joined stream => artistId={}, customerId={}, totalStreamCount={}, eventId={}, venueId={}, capacity={}, date={}",
-//                        enriched.artistId, enriched.customerId, enriched.totalStreamCount,
-//                        enriched.eventId, enriched.venueId, enriched.capacity, enriched.eventDate
-//                ))
-//                .to(OUTPUT_TOPIC,
-//                        Produced.with(Serdes.String(), AGGREGATED_STREAM_ENRICHED_JSON_SERDE));
-
 
         KStream<String, AggregatedStreamEnriched> rekeyedJoinedStream = joinedStream
                 .selectKey((oldKey, value) -> value.getCustomerId());
@@ -257,8 +212,8 @@ public class DiscountMilestoneEmail {
 
         finalEnrichedStream
                 .peek((key, value) -> log.info("Final Enriched Output: key={}, value={}", key, value))
-                .to(OUTPUT_TOPIC, Produced.with(Serdes.String(), FINAL_ENRICHED_JSON_SERDE));
-
+                .to(OUTPUT_TOPIC, Produced.with(Serdes.String(), FINAL_ENRICHED_JSON_SERDE)
+        );
     }
 
     @Data
@@ -273,14 +228,12 @@ public class DiscountMilestoneEmail {
         private String venueId;
         private Integer capacity;
         private String eventDate;
-        // Fields from EnrichedCustomer
         private String fName;
         private String lName;
         private String title;
         private String gender;
         private String email;
     }
-
 
     @Data
     @Builder
@@ -295,7 +248,6 @@ public class DiscountMilestoneEmail {
         private String email;
     }
 
-
     @Data
     @Builder
     @NoArgsConstructor
@@ -307,7 +259,6 @@ public class DiscountMilestoneEmail {
         private String title;
         private String gender;
     }
-
 
     @Data
     @Builder
@@ -332,31 +283,6 @@ public class DiscountMilestoneEmail {
         private String artistId;
         private long totalStreamCount;
     }
-
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class StreamClass {
-        private String streamId;
-        private String customerId;
-        private String artistId;
-        private String streamTime;
-    }
-
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class DiscountMilestoneEmailConfirmation {
-        // class copied from other file, needs to be changed to the final one while creating
-        private String confirmationStatus;
-        private String confirmationId;
-        private Ticket ticketRequest;
-        private Event event;
-        private double remainingTickets;
-    }
-
 }
 
 
