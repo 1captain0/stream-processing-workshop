@@ -35,8 +35,6 @@ public class StreamingBehaviourTracker {
     public static final JsonSerde<MatchedArtist> MATCHED_ARTIST_SERDE =
             new JsonSerde<>(MatchedArtist.class);
 
-
-
     public static final String TOP_STREAMED_STORE = "top-streamed-artist";
     public static final String TOP_ATTENDED_STORE = "top-attended-artist";
 

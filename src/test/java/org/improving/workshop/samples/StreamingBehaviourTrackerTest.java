@@ -9,7 +9,6 @@ import org.junit.jupiter.api.*;
 import org.msse.demo.mockdata.music.event.Event;
 import org.msse.demo.mockdata.music.stream.Stream;
 import org.msse.demo.mockdata.music.ticket.Ticket;
-
 import java.time.Duration;
 import java.util.List;
 
@@ -27,8 +26,8 @@ public class StreamingBehaviourTrackerTest {
 
     @BeforeEach
     void setup() {
-        StreamingBehaviourTracker.ARTIST_COUNT_SERDE.deserializer().addTrustedPackages("org.improving.workshop.samples");
-        StreamingBehaviourTracker.MATCHED_ARTIST_SERDE.deserializer().addTrustedPackages("org.improving.workshop.samples");
+//        StreamingBehaviourTracker.ARTIST_COUNT_SERDE.deserializer().addTrustedPackages("org.improving.workshop.samples");
+//        StreamingBehaviourTracker.MATCHED_ARTIST_SERDE.deserializer().addTrustedPackages("org.improving.workshop.samples");
 
         StreamsBuilder builder = new StreamsBuilder();
         StreamingBehaviourTracker.configureTopology(builder);
@@ -72,28 +71,33 @@ public class StreamingBehaviourTrackerTest {
         String streamId3 = "stream-3";
         String streamId4 = "stream-4";
         String streamId5 = "stream-5";
+        String streamId6 = "stream-6";
 
         String eventId1 = "event-1";
         String eventId2 = "event-2";
         String eventId3 = "event-3";
+        String eventId4 = "event-4";
 
         Event event1 = new Event(eventId1, "artist-1", "venue-1", 10, "2025-03-27");
         Event event2 = new Event(eventId2, "artist-2", "venue-2", 10, "2025-06-27");
         Event event3 = new Event(eventId3, "artist-1", "venue-1", 10, "2025-08-27");
+        Event event4 = new Event(eventId4, "artist-3", "venue-3", 10, "2025-08-26" );
 
         streamInputTopic.pipeInput(streamId1, new Stream(streamId1, "customer-1", "artist-1", "2"));
         streamInputTopic.pipeInput(streamId2, new Stream(streamId2, "customer-1", "artist-1", "5"));
         streamInputTopic.pipeInput(streamId5, new Stream(streamId5, "customer-1", "artist-1", "5"));
         streamInputTopic.pipeInput(streamId3, new Stream(streamId3, "customer-2", "artist-1", "7"));
         streamInputTopic.pipeInput(streamId4, new Stream(streamId4, "customer-2", "artist-1", "3"));
+        streamInputTopic.pipeInput(streamId6, new Stream(streamId6, "customer-3", "artist-3", "1"));
 
         eventInputTopic.pipeInput(eventId1, event1);
         eventInputTopic.pipeInput(eventId2, event2);
         eventInputTopic.pipeInput(eventId3, event3);
+        eventInputTopic.pipeInput(eventId4, event4);
 
         ticketInputTopic.pipeInput(DataFaker.TICKETS.generate("customer-1", eventId1));
         ticketInputTopic.pipeInput(DataFaker.TICKETS.generate("customer-2", eventId2));
-        ticketInputTopic.pipeInput(DataFaker.TICKETS.generate("customer-3", eventId1));
+        ticketInputTopic.pipeInput(DataFaker.TICKETS.generate("customer-3", eventId4));
         ticketInputTopic.pipeInput(DataFaker.TICKETS.generate("customer-4", eventId3));
         ticketInputTopic.pipeInput(DataFaker.TICKETS.generate("customer-5", eventId3));
         ticketInputTopic.pipeInput(DataFaker.TICKETS.generate("customer-6", eventId3));
