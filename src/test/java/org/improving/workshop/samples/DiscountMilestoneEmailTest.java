@@ -45,6 +45,7 @@ public class DiscountMilestoneEmailTest {
 //    private TestOutputTopic<String, DiscountMilestoneEmail.DiscountMilestoneEmailConfirmation> outputTopic;
 //    private TestOutputTopic<String, DiscountMilestoneEmail.StreamClass> outputTopicStream;
     private TestOutputTopic<String, DiscountMilestoneEmail.AggregatedStreamEnriched> outputTopic;
+    private TestOutputTopic<String, Event> eventOutputTopic;
 
 //    DiscountMilestoneEmail.AGGREGATED_STREAM_JSON_SERDE.deserializer().addTrustedPackages("org.improving.workshop.samples");
 
@@ -112,6 +113,12 @@ public class DiscountMilestoneEmailTest {
                 stringDeserializer,
                 DiscountMilestoneEmail.AGGREGATED_STREAM_ENRICHED_JSON_SERDE.deserializer()
         );
+
+        eventOutputTopic = driver.createOutputTopic(
+                DiscountMilestoneEmail.EVENT_OUTPUT_TOPIC,
+                stringDeserializer,
+                Streams.SERDE_EVENT_JSON.deserializer()
+        );
     }
 
     @AfterEach
@@ -126,24 +133,33 @@ public class DiscountMilestoneEmailTest {
     void confirmMilestoneDiscount() {
         // Test case goes here
 
-    String eventId = "event-1";
-    eventInputTopic.pipeInput(eventId, new Event(eventId, "artist-1", "venue-1", 5, "2025-11-21 00:07:06.973"));
-    eventInputTopic.pipeInput(eventId, new Event(eventId, "artist-1", "venue-2", 10, "2025-04-24 06:49:41.862"));
+    String eventId1 = "event-1";
+    String eventId2 = "event-2";
+    String eventId3 = "event-3";
+
+    eventInputTopic.pipeInput(eventId1, new Event(eventId1, "artist-1", "venue-1", 5, "2025-11-21 00:07:06.973"));
+    eventInputTopic.pipeInput(eventId2, new Event(eventId2, "artist-1", "venue-2", 10, "2025-04-24 06:49:41.862"));
+    eventInputTopic.pipeInput(eventId3, new Event(eventId3, "artist-2", "venue-2", 15, "2025-10-24 06:49:41.862"));
+
+    var eventOutputRecords = eventOutputTopic.readRecordsToList();
+    assertEquals(3, eventOutputRecords.size());
 
     String streamId1 = "stream-1";
     String streamId2 = "stream-2";
     String streamId3 = "stream-3";
     String streamId4 = "stream-4";
     String streamId5 = "stream-5";
+    String streamId6 = "stream-6";
 
     streamInputTopic.pipeInput(streamId1, new Stream(streamId1, "customer-1", "artist-1", "2"));
     streamInputTopic.pipeInput(streamId2, new Stream(streamId2, "customer-1", "artist-1", "5"));
-    streamInputTopic.pipeInput(streamId5, new Stream(streamId5, "customer-1", "artist-1", "5"));
+    streamInputTopic.pipeInput(streamId5, new Stream(streamId5, "customer-1", "artist-2", "5"));
+    streamInputTopic.pipeInput(streamId5, new Stream(streamId6, "customer-1", "artist-2", "3"));
     streamInputTopic.pipeInput(streamId3, new Stream(streamId3, "customer-2", "artist-1", "7"));
     streamInputTopic.pipeInput(streamId4, new Stream(streamId4, "customer-2", "artist-1", "3"));
 
     var outputRecords = outputTopic.readRecordsToList();
-    assertEquals(1, outputRecords.size());
+    assertEquals(3, outputRecords.size());
 
     }
 }
