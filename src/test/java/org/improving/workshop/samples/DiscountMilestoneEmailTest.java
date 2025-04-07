@@ -130,8 +130,8 @@ public class DiscountMilestoneEmailTest {
         streamInputTopic.pipeInput("stream-5", new Stream("stream-5", "customer-1", "artist-1", "5"));
         streamInputTopic.pipeInput("stream-6", new Stream("stream-6", "customer-1", "artist-1", "3"));
         // For customer-2 with artist-1, we send two streams (milestone at 2).
-        streamInputTopic.pipeInput("stream-3", new Stream("stream-3", "customer-2", "artist-1", "7"));
-        streamInputTopic.pipeInput("stream-4", new Stream("stream-4", "customer-2", "artist-1", "3"));
+        streamInputTopic.pipeInput("stream-3", new Stream("stream-3", "customer-2", "artist-2", "7"));
+        streamInputTopic.pipeInput("stream-4", new Stream("stream-4", "customer-2", "artist-2", "3"));
 
         var outputRecords = finalEnrichedOutputTopic.readRecordsToList();
         assertEquals(3, outputRecords.size());
@@ -151,13 +151,14 @@ public class DiscountMilestoneEmailTest {
                 cust2RecordMilestone2 = record.value();
             }
         }
-        assertNotNull(cust1RecordMilestone2, "Customer 1 milestone at 2 streams is missing");
-        assertNotNull(cust1RecordMilestone4, "Customer 1 milestone at 4 streams is missing");
-        assertNotNull(cust2RecordMilestone2, "Customer 2 milestone at 2 streams is missing");
+        assertNotNull(cust1RecordMilestone2);
+        assertNotNull(cust1RecordMilestone4);
+        assertNotNull(cust2RecordMilestone2);
 
         // test for the values that are the earliest event for the artist
-        DiscountMilestoneEmail.FinalEnrichedOutput enrichedOutput = outputRecords.get(0).value();
-        assertEquals("2025-04-24 06:49:41.862", enrichedOutput.getEventDate(),
-                "The earliest event date does not match the expected value");
+        assertEquals("2025-04-24 06:49:41.862", cust1RecordMilestone2.getEventDate());
+        assertEquals("2025-04-24 06:49:41.862", cust1RecordMilestone4.getEventDate());
+        assertEquals("2025-10-24 06:49:41.862", cust2RecordMilestone2.getEventDate());
+
     }
 }
