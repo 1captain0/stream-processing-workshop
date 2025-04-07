@@ -39,16 +39,16 @@ public class DiscountMilestoneEmailTest {
     private TestInputTopic<String, Customer> customerInputTopic;
     private TestInputTopic<String, Email> emailInputTopic;
 
-    private TestOutputTopic<String, DiscountMilestoneEmail.AggregatedStreamEnriched> outputTopic;
+    // outputs
+    private TestOutputTopic<String, DiscountMilestoneEmail.FinalEnrichedOutput> finalEnrichedOutputTopic;
     private TestOutputTopic<String, Event> eventOutputTopic;
-
 
     @BeforeEach
     void setup() {
         // instantiate new builder
         StreamsBuilder streamsBuilder = new StreamsBuilder();
 
-        // build the CustomerStreamCount topology (by reference)
+        // build the topology
         DiscountMilestoneEmail.configureTopology(streamsBuilder);
 
         // build the TopologyTestDriver
@@ -78,10 +78,10 @@ public class DiscountMilestoneEmailTest {
                 Streams.SERDE_EMAIL_JSON.serializer()
         );
 
-        outputTopic = driver.createOutputTopic(
+        finalEnrichedOutputTopic = driver.createOutputTopic(
                 DiscountMilestoneEmail.OUTPUT_TOPIC,
                 stringDeserializer,
-                DiscountMilestoneEmail.AGGREGATED_STREAM_ENRICHED_JSON_SERDE.deserializer()
+                DiscountMilestoneEmail.FINAL_ENRICHED_JSON_SERDE.deserializer()
         );
 
         eventOutputTopic = driver.createOutputTopic(
@@ -93,56 +93,71 @@ public class DiscountMilestoneEmailTest {
 
     @AfterEach
     void cleanup() {
-        // if this close doesn't run (test fails halfway through), subsequent tests may start on old state
-        // run the test and let it cleanup, then run the test again.
         driver.close();
     }
 
     @Test
     @DisplayName("confirm milestone discounts")
     void confirmMilestoneDiscount() {
-        // Test case goes here
 
-    var cust1 = new Customer("customer-1", "PREMIUM", "M", "John", "Steven", "James", "JSJ", "", "", "1989-01-20", "2022-01-02");
-    var cust2 = new Customer("customer-2", "PREMIUM", "M", "Jane", "Jo", "James", "JJJ", "", "", "1990-01-20", "2022-01-02");
+        var cust1 = new Customer("customer-1", "PREMIUM", "M", "John", "Steven", "James", "JSJ", "", "", "1989-01-20", "2022-01-02");
+        var cust2 = new Customer("customer-2", "PREMIUM", "M", "Jane", "Jo", "James", "JJJ", "", "", "1990-01-20", "2022-01-02");
 
-    customerInputTopic.pipeKeyValueList(List.of(
-            new KeyValue<String, Customer>(cust1.id(), cust1),
-            new KeyValue<String, Customer>(cust2.id(), cust2)
-    ));
+        customerInputTopic.pipeKeyValueList(List.of(
+                new KeyValue<>(cust1.id(), cust1),
+                new KeyValue<>(cust2.id(), cust2)
+        ));
 
-    String emailKey1  = "email-1";
-    String emailKey2  = "email-2";
-    emailInputTopic.pipeInput(emailKey1, new Email(emailKey1, "customer-1", "customer1@gmail.com"));
-    emailInputTopic.pipeInput(emailKey2, new Email(emailKey2, "customer-2", "customer2@gmail.com"));
+        emailInputTopic.pipeInput("email-1", new Email("email-1", "customer-1", "customer1@gmail.com"));
+        emailInputTopic.pipeInput("email-2", new Email("email-2", "customer-2", "customer2@gmail.com"));
 
-    String eventId1 = "event-1";
-    String eventId2 = "event-2";
-    String eventId3 = "event-3";
+        String eventId1 = "event-1";
+        String eventId2 = "event-2";
+        String eventId3 = "event-3";
+        String eventId4 = "event-4";
 
-    eventInputTopic.pipeInput(eventId1, new Event(eventId1, "artist-1", "venue-1", 5, "2025-11-21 00:07:06.973"));
-    eventInputTopic.pipeInput(eventId2, new Event(eventId2, "artist-1", "venue-2", 10, "2025-04-24 06:49:41.862"));
-    eventInputTopic.pipeInput(eventId3, new Event(eventId3, "artist-2", "venue-2", 15, "2025-10-24 06:49:41.862"));
+        eventInputTopic.pipeInput(eventId1, new Event(eventId1, "artist-1", "venue-1", 5, "2025-11-21 00:07:06.973"));
+        eventInputTopic.pipeInput(eventId2, new Event(eventId4, "artist-1", "venue-4", 20, "2025-06-24 06:49:41.862"));
+        eventInputTopic.pipeInput(eventId2, new Event(eventId2, "artist-1", "venue-2", 10, "2025-04-24 06:49:41.862"));
+        eventInputTopic.pipeInput(eventId3, new Event(eventId3, "artist-2", "venue-2", 15, "2025-10-24 06:49:41.862"));
 
-    var eventOutputRecords = eventOutputTopic.readRecordsToList();
-    assertEquals(3, eventOutputRecords.size());
+        var eventOutputRecords = eventOutputTopic.readRecordsToList();
+        assertEquals(4, eventOutputRecords.size());
 
-    String streamId1 = "stream-1";
-    String streamId2 = "stream-2";
-    String streamId3 = "stream-3";
-    String streamId4 = "stream-4";
-    String streamId5 = "stream-5";
-    String streamId6 = "stream-6";
+        // For customer-1 with artist-1, we send four streams (milestones at 2 and 4).
+        streamInputTopic.pipeInput("stream-1", new Stream("stream-1", "customer-1", "artist-1", "2"));
+        streamInputTopic.pipeInput("stream-2", new Stream("stream-2", "customer-1", "artist-1", "5"));
+        streamInputTopic.pipeInput("stream-5", new Stream("stream-5", "customer-1", "artist-1", "5"));
+        streamInputTopic.pipeInput("stream-6", new Stream("stream-6", "customer-1", "artist-1", "3"));
+        // For customer-2 with artist-1, we send two streams (milestone at 2).
+        streamInputTopic.pipeInput("stream-3", new Stream("stream-3", "customer-2", "artist-1", "7"));
+        streamInputTopic.pipeInput("stream-4", new Stream("stream-4", "customer-2", "artist-1", "3"));
 
-    streamInputTopic.pipeInput(streamId1, new Stream(streamId1, "customer-1", "artist-1", "2"));
-    streamInputTopic.pipeInput(streamId2, new Stream(streamId2, "customer-1", "artist-1", "5"));
-    streamInputTopic.pipeInput(streamId5, new Stream(streamId5, "customer-1", "artist-1", "5"));
-    streamInputTopic.pipeInput(streamId5, new Stream(streamId6, "customer-1", "artist-1", "3"));
-    streamInputTopic.pipeInput(streamId3, new Stream(streamId3, "customer-2", "artist-1", "7"));
-    streamInputTopic.pipeInput(streamId4, new Stream(streamId4, "customer-2", "artist-1", "3"));
+        var outputRecords = finalEnrichedOutputTopic.readRecordsToList();
+        assertEquals(3, outputRecords.size());
 
-    var outputRecords = outputTopic.readRecordsToList();
-    assertEquals(3, outputRecords.size());
+        DiscountMilestoneEmail.FinalEnrichedOutput cust1RecordMilestone2 = null;
+        DiscountMilestoneEmail.FinalEnrichedOutput cust1RecordMilestone4 = null;
+        DiscountMilestoneEmail.FinalEnrichedOutput cust2RecordMilestone2 = null;
 
+        for (TestRecord<String, DiscountMilestoneEmail.FinalEnrichedOutput> record : outputRecords) {
+            if ("customer-1".equals(record.key())) {
+                if (record.value().getTotalStreamCount() == 2) {
+                    cust1RecordMilestone2 = record.value();
+                } else if (record.value().getTotalStreamCount() == 4) {
+                    cust1RecordMilestone4 = record.value();
+                }
+            } else if ("customer-2".equals(record.key()) && record.value().getTotalStreamCount() == 2) {
+                cust2RecordMilestone2 = record.value();
+            }
+        }
+        assertNotNull(cust1RecordMilestone2, "Customer 1 milestone at 2 streams is missing");
+        assertNotNull(cust1RecordMilestone4, "Customer 1 milestone at 4 streams is missing");
+        assertNotNull(cust2RecordMilestone2, "Customer 2 milestone at 2 streams is missing");
+
+        // test for the values that are the earliest event for the artist
+        DiscountMilestoneEmail.FinalEnrichedOutput enrichedOutput = outputRecords.get(0).value();
+        assertEquals("2025-04-24 06:49:41.862", enrichedOutput.getEventDate(),
+                "The earliest event date does not match the expected value");
     }
 }
