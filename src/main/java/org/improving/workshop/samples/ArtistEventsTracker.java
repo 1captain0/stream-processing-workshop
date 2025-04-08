@@ -9,7 +9,10 @@ import org.msse.demo.mockdata.music.ticket.Ticket;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.fasterxml.jackson.core.JsonParser;
+//import org.apache.kafka.streams.kstream.Suppressed;
+
+
+//import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -20,11 +23,13 @@ import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.StreamsBuilder;
 import org.springframework.kafka.support.serializer.JsonSerde;
 
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import static java.util.Collections.reverseOrder;
-import static java.util.stream.Collectors.toMap;
+//import static java.util.Collections.reverseOrder;
+//import static java.util.stream.Collectors.toMap;
 import static org.apache.kafka.streams.state.Stores.persistentKeyValueStore;
 import static org.improving.workshop.Streams.*;
 
@@ -41,13 +46,13 @@ public class ArtistEventsTracker {
 
     // Jackson is converting Value into Integer Not Long due to erasure,
     //public static final JsonSerde<LinkedHashMap<String, Long>> LINKED_HASH_MAP_JSON_SERDE = new JsonSerde<>(LinkedHashMap.class);
-    public static final JsonSerde<LinkedHashMap<String, Long>> LINKED_HASH_MAP_JSON_SERDE
-            = new JsonSerde<>(
-            new TypeReference<LinkedHashMap<String, Long>>() {
-            },
-            new ObjectMapper()
-                    .configure(DeserializationFeature.USE_LONG_FOR_INTS, true)
-    );
+//    public static final JsonSerde<LinkedHashMap<String, Long>> LINKED_HASH_MAP_JSON_SERDE
+//            = new JsonSerde<>(
+//            new TypeReference<LinkedHashMap<String, Long>>() {
+//            },
+//            new ObjectMapper()
+//                    .configure(DeserializationFeature.USE_LONG_FOR_INTS, true)
+//    );
     public static final JsonSerde<ArtistEvent> ARTIST_EVENT_JSON_SERDE
             = new JsonSerde<>(
             new TypeReference<ArtistEvent>() {},
@@ -130,15 +135,16 @@ public class ArtistEventsTracker {
                         ArtistEventAggregation::new,
 
                         (artistId, eventTicket, aggregation) -> {
-                            double currentTurnout = eventTicket.getTurnout();
-
-                            // Check if we need to update best or worst event for the artist
-                            if (aggregation.bestEvent == null || currentTurnout >= aggregation.bestEvent.getTurnout()) {
-                                aggregation.bestEvent = eventTicket;  // Update the best event if current turnout is better
-                            }
-                            if (aggregation.worstEvent == null || currentTurnout < aggregation.worstEvent.getTurnout()) {
-                                aggregation.worstEvent = eventTicket;  // Update the worst event if current turnout is worse
-                            }
+//                            double currentTurnout = eventTicket.getTurnout();
+//
+//                            // Check if we need to update best or worst event for the artist
+//                            if (aggregation.bestEvent == null || currentTurnout >= aggregation.bestEvent.getTurnout()) {
+//                                aggregation.bestEvent = eventTicket;  // Update the best event if current turnout is better
+//                            }
+//                            if (aggregation.worstEvent == null || currentTurnout < aggregation.worstEvent.getTurnout()) {
+//                                aggregation.worstEvent = eventTicket;  // Update the worst event if current turnout is worse
+//                            }
+                            aggregation.updateEvent(eventTicket);
 
                             return aggregation;
 
@@ -238,12 +244,30 @@ public class ArtistEventsTracker {
     @Data
     @AllArgsConstructor
     public static class ArtistEventAggregation {
+        public Map<String, EventTicketAggregation> allEvents;
         public EventTicketAggregation bestEvent;
         public EventTicketAggregation worstEvent;
 
         public ArtistEventAggregation() {
+            this.allEvents = new HashMap<>();
             this.bestEvent = null;
             this.worstEvent = null;
+        }
+
+
+        public void updateEvent(EventTicketAggregation newAgg) {
+            String eventId = newAgg.event.id();
+            allEvents.put(eventId, newAgg);
+
+            // Recalculate best/worst from current state
+            this.bestEvent = allEvents.values().stream()
+                    .max(Comparator.comparingDouble(EventTicketAggregation::getTurnout))
+                    .orElse(null);
+
+
+            this.worstEvent = allEvents.values().stream()
+                    .min(Comparator.comparingDouble(EventTicketAggregation::getTurnout))
+                    .orElse(null);
         }
 
         // Serde for the aggregation object (you can implement it if necessary)
