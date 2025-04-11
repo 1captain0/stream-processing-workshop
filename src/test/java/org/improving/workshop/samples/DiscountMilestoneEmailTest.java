@@ -98,7 +98,7 @@ public class DiscountMilestoneEmailTest {
 
     @Test
     @DisplayName("confirm milestone discounts")
-    void confirmMilestoneDiscount() {
+    void confirmMilestoneDiscounts() {
 
         var cust1 = new Customer("customer-1", "PREMIUM", "M", "John", "Steven", "James", "JSJ", "", "", "1989-01-20", "2022-01-02");
         var cust2 = new Customer("customer-2", "PREMIUM", "M", "Jane", "Jo", "James", "JJJ", "", "", "1990-01-20", "2022-01-02");
@@ -117,8 +117,8 @@ public class DiscountMilestoneEmailTest {
         String eventId4 = "event-4";
 
         eventInputTopic.pipeInput(eventId1, new Event(eventId1, "artist-1", "venue-1", 5, "2025-11-21 00:07:06.973"));
-        eventInputTopic.pipeInput(eventId2, new Event(eventId4, "artist-1", "venue-4", 20, "2025-06-24 06:49:41.862"));
-        eventInputTopic.pipeInput(eventId2, new Event(eventId2, "artist-1", "venue-2", 10, "2025-04-24 06:49:41.862"));
+        eventInputTopic.pipeInput(eventId4, new Event(eventId4, "artist-1", "venue-4", 20, "2025-08-24 06:49:41.862"));
+        eventInputTopic.pipeInput(eventId2, new Event(eventId2, "artist-1", "venue-2", 10, "2025-05-24 06:49:41.862"));
         eventInputTopic.pipeInput(eventId3, new Event(eventId3, "artist-2", "venue-2", 15, "2025-10-24 06:49:41.862"));
 
         var eventOutputRecords = eventOutputTopic.readRecordsToList();
@@ -156,9 +156,26 @@ public class DiscountMilestoneEmailTest {
         assertNotNull(cust2RecordMilestone2);
 
         // test for the values that are the earliest event for the artist
-        assertEquals("2025-04-24 06:49:41.862", cust1RecordMilestone2.getEventDate());
-        assertEquals("2025-04-24 06:49:41.862", cust1RecordMilestone4.getEventDate());
+        assertEquals("2025-05-24 06:49:41.862", cust1RecordMilestone2.getEventDate());
+        assertEquals("2025-05-24 06:49:41.862", cust1RecordMilestone4.getEventDate());
         assertEquals("2025-10-24 06:49:41.862", cust2RecordMilestone2.getEventDate());
+
+
+        eventInputTopic.pipeInput("eventId5", new Event("eventId5", "artist-1", "venue-2", 10, "2025-04-24 06:49:41.862"));
+        eventInputTopic.pipeInput("eventId5", new Event("eventId5", "artist-1", "venue-2", 10, "2025-07-24 06:49:41.862"));
+
+        var eventOutputRecords1 = eventOutputTopic.readRecordsToList();
+        assertEquals(2, eventOutputRecords1.size());
+
+        streamInputTopic.pipeInput("stream-a1", new Stream("stream-a1", "customer-2", "artist-1", "2"));
+        streamInputTopic.pipeInput("stream-a2", new Stream("stream-a2", "customer-2", "artist-1", "2"));
+        streamInputTopic.pipeInput("stream-a3", new Stream("stream-a3", "customer-1", "artist-2", "2"));
+
+        var multiArtistRecords = finalEnrichedOutputTopic.readRecordsToList();
+        assertEquals(1, multiArtistRecords.size());
+
+        var singleArtistRecord = multiArtistRecords.getFirst().getValue();
+        assertEquals("2025-04-24 06:49:41.862", singleArtistRecord.getEventDate());
 
     }
 }
