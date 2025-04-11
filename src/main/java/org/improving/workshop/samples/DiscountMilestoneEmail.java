@@ -135,7 +135,7 @@ public class DiscountMilestoneEmail {
                 .peek((artistId, event) -> log.info("Upcoming Event for artist {}: {}", artistId, event))
                 .to(EVENT_OUTPUT_TOPIC, Produced.with(Serdes.String(), SERDE_EVENT_JSON));
 
-        //  group the Streams by (customerId--artistId) => sum of streamtime
+        //  group the Streams by (customerId--artistId) => sum of streamcount
         KGroupedStream<String, Stream> groupedStreams = builder
                 .stream(TOPIC_DATA_DEMO_STREAMS, Consumed.with(Serdes.String(), Streams.SERDE_STREAM_JSON))
                 .peek((key, stream) -> log.info("received stream with key {}: {}, {}, {}",
